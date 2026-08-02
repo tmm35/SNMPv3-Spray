@@ -150,7 +150,7 @@ try_one() {
     rc=$?
 
     attempt_num=$((attempt_num + 1))
-    if [ $((attempt_num % 50)) -eq 0 ]; then
+    if [ $((attempt_num % 200)) -eq 0 ]; then
         local now elapsed
         now=$(date +%s)
         elapsed=$((now - start_time))
