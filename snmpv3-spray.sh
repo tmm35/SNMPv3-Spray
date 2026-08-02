@@ -1,4 +1,3 @@
-```bash
 #!/usr/bin/env bash
 #
 # snmpv3-brute.sh - SNMPv3 credential + security-level/protocol spray
@@ -193,4 +192,3 @@ echo "[-] Script finished. Please test all possible passwords found, if any."
 echo ""
 echo ""
 exit 1
-```
