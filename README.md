@@ -110,4 +110,5 @@ Always manually verify any flagged "possible password" with the printed command 
 
 ## Legal
 
-Use only against systems you own or are explicitly authorized to test (e.g. a CTF lab, your own infrastructure, or an engagement with signed authorization). Unauthorized access to computer systems is illegal in most jurisdictions.
+- This script was written with the assistance of Claude. If you are upset over that, oh well.
+- For use in CTFs and authorized penetration testing engagements only. Do not run this against systems you don't have explicit permission to test.
