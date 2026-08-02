@@ -1,6 +1,10 @@
 # SNMPv3-Spray
 
-A Bash script for brute-forcing SNMPv3 credentials against a target host using `snmpwalk`. Unlike a plain password spray, it exhaustively tests every SNMPv3 security level and every auth/privacy protocol combination supported by your local `net-snmp` build — no partial-coverage shortcuts.
+A Bash script for brute-forcing SNMPv3 credentials against a target host using `snmpwalk`. Unlike a plain password spray, it exhaustively tests every SNMPv3 security level and every auth/privacy protocol combination supported by your local `net-snmp` build, no partial-coverage shortcuts.
+
+## Example Output
+
+<img width="1560" height="423" alt="image" src="https://github.com/user-attachments/assets/5c707908-87ba-4870-8284-343c49dd3b10" />
 
 ## Why
 
@@ -29,6 +33,7 @@ That's 31 attempts per user/password pair (1 + 6 + 24). A 100-word list against 
 
 ```bash
 ./snmpv3-spray.sh -t <target> [-u user | -U userlist] [-p pass | -P passlist] [-d]
+                   [--NoAuthNoPriv] [--AuthNoPriv] [--AuthPriv]
 ```
 
 | Flag | Description |
@@ -39,8 +44,13 @@ That's 31 attempts per user/password pair (1 + 6 + 24). A 100-word list against 
 | `-p` | Single password |
 | `-P` | Path to a password list (one per line) |
 | `-d` | Debug mode — print every attempt, plus raw `snmpwalk` error output on failure |
+| `--NoAuthNoPriv` | Only run `noAuthNoPriv` checks |
+| `--AuthNoPriv` | Only run `authNoPriv` checks |
+| `--AuthPriv` | Only run `authPriv` checks |
 
 Exactly one of `-u`/`-U` and exactly one of `-p`/`-P` is required. Passwords under 8 characters are skipped automatically (SNMPv3 USM's minimum length requirement) and excluded from the attempt count shown at startup.
+
+The three level flags can be combined in any order and combination (e.g. `--NoAuthNoPriv --AuthPriv` runs both, skipping `authNoPriv`). If none are given, all three levels run — same as the script's original behavior.
 
 ### Examples
 
@@ -59,23 +69,29 @@ Full user × password matrix with debug output:
 ./snmpv3-spray.sh -t 10.10.10.10 -U users.txt -P passwords.txt -d
 ```
 
+Only `authNoPriv`, skipping `noAuthNoPriv` and `authPriv` entirely:
+```bash
+./snmpv3-spray.sh -t 10.10.10.10 -U users.txt -P passwords.txt --AuthNoPriv
+```
+
 ## Output
 
 On startup, the script prints an exact attempt count based on your inputs:
 
 ```
 [*] Target: 10.10.10.10
+[*] Levels: noAuthNoPriv authNoPriv authPriv
 [*] Users: 1  Passwords: 100 (69 usable, min 8 chars)
 [*] Auth protocols: MD5 SHA SHA-224 SHA-256 SHA-384 SHA-512
 [*] Priv protocols: DES AES AES-192 AES-256
 [*] Total attempts: 2139
 ```
 
-Progress updates print every 200 attempts with elapsed time:
+Progress updates print every 200 attempts with elapsed time shown as `MM:SS`:
 
 ```
-    ... 200/2139 attempts, 48s elapsed
-    ... 100/2139 attempts, 96s elapsed
+    ... 200/2139 attempts, 00:48 elapsed
+    ... 400/2139 attempts, 01:36 elapsed
 ```
 
 A confirmed success looks like:
