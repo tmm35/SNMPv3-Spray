@@ -81,7 +81,7 @@ Progress updates print every 200 attempts with elapsed time:
 A confirmed success looks like:
 
 ```
-[+] SUCCESS -> user: waserby  level: authNoPriv  authproto: MD5  privproto:  pass: butterfly
+[+] SUCCESS -> user: john  level: authNoPriv  authproto: MD5  privproto:  pass: P@ssw0rd!
     Command: snmpwalk -v3 -u john -l authNoPriv -A 'P@ssw0rd!' -a MD5 10.10.10.10
 ```
 
@@ -90,7 +90,7 @@ The script exits immediately on a confirmed success and prints the exact `snmpwa
 Some attempts may exceed the internal timeout without a definitive success/failure result — this can happen on the first successful auth against a device, due to SNMPv3 engine boot/time synchronization overhead. These are flagged as possible hits rather than discarded as failures, and the run continues rather than exiting:
 
 ```
-[?] Possible password found: butterfly (level=authNoPriv, auth=MD5, priv=) -- Try:
+[?] Possible password found: P@ssw0rd! (level=authNoPriv, auth=MD5, priv=) -- Try:
       snmpwalk -v3 -u john -l authNoPriv -A 'P@ssw0rd!' -a MD5 10.10.10.10
 ```
 
